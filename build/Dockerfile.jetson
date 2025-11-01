@@ -1,7 +1,7 @@
 # build/Dockerfile.jetson
 # Use an L4T base image close to your JetPack version.
 # If r36.4.7 isn’t published, r36.4.0 or r36.3.0 usually exists.
-ARG L4T_TAG=r36.3.0
+ARG L4T_TAG=r36.2.0
 FROM nvcr.io/nvidia/l4t-base:${L4T_TAG}
 
 # Ensure NVIDIA runtime features are exposed
