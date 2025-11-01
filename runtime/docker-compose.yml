@@ -1,0 +1,23 @@
+# runtime/docker-compose.yml
+version: '3.8'
+services:
+  llm-server:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile.jetson
+    image: trtllm-jetson
+    container_name: llm-server
+    command: bash -c "python runtime/http_server.py"
+    volumes:
+      - ../releases:/workspace/releases
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    ports:
+      - "5000:5000"
