@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# my project
+__pycache__/
+*.py[cod]
+.venv/
+
+# Model and build artifacts
+models/
+build-input/
+releases/
+calib/shards/
+*.engine
+*.plan
+logs/
+
+# System
+.DS_Store
+*.swp
+
+# Environment and secrets
+.env
+*.token

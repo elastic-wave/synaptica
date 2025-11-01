@@ -1,0 +1,8 @@
+{
+  "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "ctx_lengths": [2048],
+  "weights_precision": ["fp16", "int8"],
+  "kv_cache_precision": ["fp16", "int8"],
+  "paged_kv_cache": [true],
+  "max_batch": [1]
+}

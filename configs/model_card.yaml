@@ -1,0 +1,4 @@
+model_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+context: 2048
+license: Apache-2.0
+source: https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0
