@@ -1,5 +1,5 @@
 # build/Dockerfile.jetson
-ARG L4T_TAG=r36.3.0
+ARG L4T_TAG=r36.2.0
 FROM nvcr.io/nvidia/l4t-base:${L4T_TAG}
 
 ENV NVIDIA_VISIBLE_DEVICES=all
