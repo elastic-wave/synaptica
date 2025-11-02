@@ -1,48 +1,76 @@
 # build/build_engine.py
-import argparse, json, hashlib, os, pathlib, time
+import argparse, json, subprocess, pathlib, time, itertools
+
+def run(cmd):
+    print("[build]", " ".join(cmd))
+    subprocess.check_call(cmd)
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe", required=True)
     args = ap.parse_args()
 
-    with open(args.recipe) as f:
-        recipe = json.load(f)
+    recipe = json.loads(pathlib.Path(args.recipe).read_text())
     model_id = recipe["model_id"]
-    safe_name = model_id.replace("/", "_")
+    safe = model_id.replace("/", "_")
+    ckpt = pathlib.Path("build-input/tinyllama")  # matches your export step
 
-    out_root = pathlib.Path("releases")
-    out_root.mkdir(exist_ok=True)
+    ctx_list = recipe["ctx_lengths"]
+    wp_list  = recipe["weights_precision"]
+    kv_list  = recipe["kv_cache_precision"]
+    pkv_list = recipe.get("paged_kv_cache", [True])
+    mb_list  = recipe["max_batch"]
+    psize    = recipe.get("page_size", [128])
+    attn_plg = recipe.get("use_gpt_attention_plugin", [True])
+    gemm     = recipe.get("use_gemm_plugin", ["auto"])
+    inflight = recipe.get("enable_inflight_batching", [True])
+    cgraph   = recipe.get("use_cuda_graph", [True])
 
-    # Simulate two builds: fp16 and int8
-    for prec in ["fp16", "int8"]:
-        out_dir = out_root / f"{safe_name}-{prec}"
+    for ctx, wp, kv, pkv, mb, pg, attn, gp, ib, cg in itertools.product(
+        ctx_list, wp_list, kv_list, pkv_list, mb_list, psize, attn_plg, gemm, inflight, cgraph
+    ):
+        name = f"{safe}-ctx{ctx}-{wp}-kv{kv}-mb{mb}-pg{pg}"
+        out_dir = pathlib.Path("releases") / name
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create a dummy engine file to prove the pipeline
-        engine_path = out_dir / "model.engine"
-        with open(engine_path, "wb") as f:
-            f.write(b"DUMMY_TRT_ENGINE_PLACEHOLDER")
+        cmd = [
+            "trtllm-build",
+            f"--checkpoint_dir={ckpt}",
+            f"--output_dir={out_dir}",
+            f"--max_batch_size={mb}",
+            f"--max_input_len={ctx}",
+        ]
 
-        # Minimal manifest
-        manifest = {
+        # Precision/quant flags (names vary by TRT-LLM version)
+        if wp == "fp16":
+            cmd += ["--fp16"]
+        elif wp == "int8_wo4":
+            cmd += ["--int8"]          # weight-only INT8 base
+            cmd += ["--weight_only"]   # and allow 4-bit where supported (hybrid)
+        # KV cache
+        if kv == "int8":
+            cmd += ["--int8_kv_cache"]
+
+        # Perf features
+        if pkv:   cmd += ["--paged_kv_cache", f"--tokens_per_block={pg}"]
+        if attn:  cmd += ["--use_gpt_attention_plugin"]
+        if gp:    cmd += [f"--gemm_plugin={gp}"]
+        if ib:    cmd += ["--enable_inflight_batching"]
+        if cg:    cmd += ["--use_cuda_graph"]
+
+        # (Optional) point to calibration set for INT8 PTQ:
+        # cmd += ["--calib_data_dir=calib/shards"]
+
+        run(cmd)
+
+        (out_dir / "MANIFEST.json").write_text(json.dumps({
             "model_id": model_id,
-            "precision": prec,
-            "ctx_lengths": recipe.get("ctx_lengths", []),
-            "kv_cache_precision": recipe.get("kv_cache_precision", []),
-            "paged_kv_cache": recipe.get("paged_kv_cache", []),
-            "max_batch": recipe.get("max_batch", []),
+            "ctx": ctx, "weights_precision": wp, "kv_cache_precision": kv,
+            "paged_kv_cache": pkv, "page_size": pg, "max_batch": mb,
+            "attention_plugin": attn, "gemm_plugin": gp,
+            "inflight_batching": ib, "cuda_graph": cg,
             "timestamp": int(time.time())
-        }
-        (out_dir / "MANIFEST.json").write_text(json.dumps(manifest, indent=2))
-
-        # Hash
-        h = hashlib.sha256(engine_path.read_bytes()).hexdigest()
-        (out_dir / "HASH.txt").write_text(h + "\n")
-
-        print(f"[build] Wrote dummy engine: {engine_path}")
-
-    print("[build] Placeholder build complete. Replace this script’s middle section with real TRT-LLM calls when ready.")
+        }, indent=2))
 
 if __name__ == "__main__":
     main()

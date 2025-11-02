@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage: ./run_matrix.sh [MODEL_NAME]
+MODEL="${1:-tinyllama}"   # default if not provided
+
+echo "▶ Benchmarking model: ${MODEL}"
+
 MODEL_ROOT="/media/ubuntu/ssd_drive/projects/synaptica/releases/gguf"  # e.g., /home/ubuntu/jetson-llm-quant-poc/releases
 PROMPTS="bench/prompts/quick.txt"
 OUT_DIR="bench/results_matrix"
@@ -19,8 +24,8 @@ log() { echo "[$(date +'%H:%M:%S')] $*"; }
 for quant in "${QUANTS[@]}"; do
   for ctx in "${CONTEXTS[@]}"; do
     for gl in "${GPU_LAYERS[@]}"; do
-      model_path="${MODEL_ROOT}/tinyllama-${quant}.gguf"
-      out_csv="${OUT_DIR}/tinyllama_${quant}_c${ctx}_gl${gl}.csv"
+      model_path="${MODEL_ROOT}/${MODEL}-${quant}.gguf"
+      out_csv="${OUT_DIR}/${MODEL}_${quant}_c${ctx}_gl${gl}.csv"
       server_log="${OUT_DIR}/server_${quant}_c${ctx}_gl${gl}.log"
 
       log "=== Running ${quant} | ctx=${ctx} | gpu-layers=${gl} ==="

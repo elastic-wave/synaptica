@@ -1,8 +1,13 @@
 {
   "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-  "ctx_lengths": [2048],
-  "weights_precision": ["fp16", "int8"],
-  "kv_cache_precision": ["fp16", "int8"],
+  "ctx_lengths": [1024, 2048],
+  "weights_precision": ["fp16", "int8_wo4"],        // "int8_wo4" = weight-only INT8/INT4 hybrid if supported
+  "kv_cache_precision": ["fp16", "int8"],           // try INT8 KV for speed/mem
   "paged_kv_cache": [true],
-  "max_batch": [1]
+  "max_batch": [1],
+  "page_size": [128],                                // TRT-LLM paged KV parameter
+  "use_gpt_attention_plugin": [true],
+  "use_gemm_plugin": ["auto"],                       // let TRT pick best kernels
+  "enable_inflight_batching": [true],
+  "use_cuda_graph": [true]
 }

@@ -1,5 +1,7 @@
 # bench/bench_llamacpp.py
 import argparse, time, csv, json, pathlib, subprocess, requests
+from transformers import AutoTokenizer
+TOKENIZER = AutoTokenizer.from_pretrained("models/TinyLlama_TinyLlama-1.1B-Chat-v1.0", use_fast=True)
 
 LLAMA_URL = "http://127.0.0.1:8080/completion"
 
@@ -79,8 +81,8 @@ def main():
                 p, n_predict=args.n_predict, temperature=args.temperature, stream=(not args.no_stream)
             )
             # very rough token estimate: split on whitespace
-            est_tokens = max(1, len(out_text.split()))
-            tok_per_s = (est_tokens / (total_ms/1000.0)) if total_ms > 0 else 0.0
+            est_tokens = len(TOKENIZER.encode(out_text))
+            tok_per_s = est_tokens / (total_ms/1000.0) if total_ms > 0 else 0.0
             print(f"TTFB={ttfb:.1f} ms  total={total_ms:.1f} ms  est_tok/s={tok_per_s:.2f}")
             rows.append({
                 'prompt': p,
