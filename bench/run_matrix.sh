@@ -28,7 +28,8 @@ for quant in "${QUANTS[@]}"; do
       sleep 2
 
       # start server in background
-      ./media/ubuntu/ssd_drive/llama.cpp/build/bin/llama-server \
+      cd /media/ubuntu/ssd_drive/llama.cpp
+      ./build/bin/llama-server \
         -m "${model_path}" \
         -c "${ctx}" \
         --gpu-layers "${gl}" \
@@ -40,6 +41,7 @@ for quant in "${QUANTS[@]}"; do
       sleep 6
 
       # run benchmark
+      cd /media/ubuntu/ssd_drive/projects/synaptica
       python bench/bench_llamacpp.py \
         --prompts "${PROMPTS}" \
         --out "${out_csv}" \
