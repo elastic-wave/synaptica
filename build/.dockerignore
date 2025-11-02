@@ -1,0 +1,13 @@
+# heavy stuff we never want inside image build context
+models/
+build-input/
+releases/
+calib/
+__pycache__/
+*.engine
+*.plan
+*.gguf
+.git/
+.gitignore
+.DS_Store
+*.swp
