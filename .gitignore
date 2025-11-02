@@ -226,3 +226,4 @@ logs/
 # Environment and secrets
 .env
 *.token
+notes.txt

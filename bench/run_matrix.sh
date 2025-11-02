@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_ROOT="/path/to/your/gguf/models"  # e.g., /home/ubuntu/jetson-llm-quant-poc/releases
+MODEL_ROOT="/media/ubuntu/ssd_drive/projects/synaptica/releases/gguf"  # e.g., /home/ubuntu/jetson-llm-quant-poc/releases
 PROMPTS="bench/prompts/quick.txt"
 OUT_DIR="bench/results_matrix"
 N_PREDICT=128
@@ -28,7 +28,7 @@ for quant in "${QUANTS[@]}"; do
       sleep 2
 
       # start server in background
-      ./build/bin/llama-server \
+      ./media/ubuntu/ssd_drive/llama.cpp/build/bin/llama-server \
         -m "${model_path}" \
         -c "${ctx}" \
         --gpu-layers "${gl}" \
