@@ -5,54 +5,78 @@ MODEL_ROOT="/media/ubuntu/ssd_drive/projects/synaptica/releases/gguf"  # e.g., /
 PROMPTS="bench/prompts/quick.txt"
 OUT_DIR="bench/results_matrix"
 N_PREDICT=128
+PORT=8080
 
 mkdir -p "$OUT_DIR"
 
-# Define test parameters
 QUANTS=("q4km" "q5km" "q8_0")
 CONTEXTS=(512 768 1024)
 GPU_LAYERS=(0 32 64)
+
+# Simple timestamped log
+log() { echo "[$(date +'%H:%M:%S')] $*"; }
 
 for quant in "${QUANTS[@]}"; do
   for ctx in "${CONTEXTS[@]}"; do
     for gl in "${GPU_LAYERS[@]}"; do
       model_path="${MODEL_ROOT}/tinyllama-${quant}.gguf"
       out_csv="${OUT_DIR}/tinyllama_${quant}_c${ctx}_gl${gl}.csv"
+      server_log="${OUT_DIR}/server_${quant}_c${ctx}_gl${gl}.log"
 
-      echo
-      echo "=== Running ${quant} | context=${ctx} | gpu-layers=${gl} ==="
-      echo "Output → ${out_csv}"
+      log "=== Running ${quant} | ctx=${ctx} | gpu-layers=${gl} ==="
+      log "Model path: ${model_path}"
+      log "Output CSV: ${out_csv}"
 
-      # kill any old server
+      # Kill any old server
       pkill -f llama-server || true
       sleep 2
 
-      # start server in background
+      if [[ ! -f "$model_path" ]]; then
+        log "⚠️ Model file not found: $model_path"
+        continue
+      fi
+
+      # Start llama.cpp server
+      log "Starting server..."
       cd /media/ubuntu/ssd_drive/llama.cpp
       ./build/bin/llama-server \
-        -m "${model_path}" \
-        -c "${ctx}" \
-        --gpu-layers "${gl}" \
+        -m "$model_path" \
+        -c "$ctx" \
+        --gpu-layers "$gl" \
         --host 0.0.0.0 \
-        --port 8080 \
-        >"${OUT_DIR}/server_${quant}_c${ctx}_gl${gl}.log" 2>&1 &
+        --port "$PORT" \
+        >"$server_log" 2>&1 &
 
-      # give server a few seconds to initialize
-      sleep 6
+      server_pid=$!
+      sleep 6  # give it time to load
 
-      # run benchmark
+      # Check server health
+      if ! curl -s --max-time 5 "http://127.0.0.1:${PORT}/health" >/dev/null; then
+        log "❌ Server not responding on port ${PORT}. Check ${server_log}"
+        pkill -f llama-server || true
+        continue
+      fi
+
+      log "✅ Server responding. Starting benchmark..."
+
+      # Run benchmark
       cd /media/ubuntu/ssd_drive/projects/synaptica
-      python bench/bench_llamacpp.py \
-        --prompts "${PROMPTS}" \
-        --out "${out_csv}" \
-        --n_predict "${N_PREDICT}"
+      if ! python bench/bench_llamacpp.py \
+        --prompts "$PROMPTS" \
+        --out "$out_csv" \
+        --n_predict "$N_PREDICT"; then
+        log "❌ Benchmark failed for ${quant}_c${ctx}_gl${gl}"
+      else
+        log "✅ Benchmark completed for ${quant}_c${ctx}_gl${gl}"
+      fi
 
-      # stop server
+      log "Stopping server..."
       pkill -f llama-server || true
       sleep 2
+      log "---------------------------------------------"
     done
   done
 done
 
-echo "=== All benchmarks complete ==="
-echo "Results saved under ${OUT_DIR}/"
+log "All benchmarks complete."
+log "Results: $OUT_DIR"

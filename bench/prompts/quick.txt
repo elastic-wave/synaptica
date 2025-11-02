@@ -1,0 +1,20 @@
+What is the capital of France?
+Compute 37 × 12.
+Write a Python function that reverses a string.
+Describe a sunrise on Mars in one paragraph.
+User: Hello!  Assistant: Hi there! How can I help today?
+If all bloops are flargs and no flargs are squibs, are any bloops squibs?
+In a distant future, humanity has spread among the stars.
+Summarize the following text in two sentences: Artificial intelligence allows computers to learn from data and make predictions.
+Explain how a neural network updates its weights during backpropagation.
+Pretend you are an ancient librarian. How would you greet a visitor?
+What is the capital of France?
+Compute 37 × 12.
+Write a Python function that reverses a string.
+Describe a sunrise on Mars in one paragraph.
+User: Hello!  Assistant: Hi there! How can I help today?
+If all bloops are flargs and no flargs are squibs, are any bloops squibs?
+In a distant future, humanity has spread among the stars.
+Summarize the following text in two sentences: Artificial intelligence allows computers to learn from data and make predictions.
+Explain how a neural network updates its weights during backpropagation.
+Pretend you are an ancient librarian. How would you greet a visitor?
