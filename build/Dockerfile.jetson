@@ -52,7 +52,12 @@ RUN cd /workspace/TensorRT-LLM && \
       --job_count $(nproc) \
       --no-venv \
       --binding_type pybind \
-      --extra-cmake-vars "-DTensorRT_ROOT=/usr -DCMAKE_PREFIX_PATH=/usr/lib/aarch64-linux-gnu/cmake/TensorRT -DCMAKE_CUDA_ARCHITECTURES=87 -DBUILD_DEEP_EP=OFF -DBUILD_DEEP_GEMM=OFF -DBUILD_FLASH_MLA=OFF" && \
+      --cuda_architectures 87 \
+      --extra-cmake-vars=-DTensorRT_ROOT=/usr \
+      --extra-cmake-vars=-DCMAKE_PREFIX_PATH=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
+      --extra-cmake-vars=-DBUILD_DEEP_EP=OFF \
+      --extra-cmake-vars=-DBUILD_DEEP_GEMM=OFF \
+      --extra-cmake-vars=-DBUILD_FLASH_MLA=OFF && \
     python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
 
 
