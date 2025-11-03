@@ -1,7 +1,9 @@
 ARG L4T_TAG=r36.2.0
 FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
+
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 WORKDIR /workspace
 
 # IMPORTANT: declare the series arg *after* FROM so it's visible in this stage
@@ -73,8 +75,6 @@ RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true
 
 # Configure + build TRT-LLM wheel using system TensorRT in /usr, NCCL disabled
 RUN cd /workspace/TensorRT-LLM && \
-    python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" conan~=2.4 && \
-    conan profile detect --force || true && \
     python3 scripts/build_wheel.py \
       --clean \
       --build_type Release \
@@ -84,12 +84,13 @@ RUN cd /workspace/TensorRT-LLM && \
       --cuda_architectures 87 \
       --trt_root /usr \
       --extra-cmake-vars CMAKE_PREFIX_PATH=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
+      --extra-cmake-vars CMAKE_DISABLE_FIND_PACKAGE_NCCL=ON \
       --extra-cmake-vars TRTLLM_USE_NCCL=OFF \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
-      --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
-    python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
+      --extra-cmake-vars BUILD_FLASH_MLA=OFF \
+    && python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
 
 
 CMD ["/bin/bash"]
