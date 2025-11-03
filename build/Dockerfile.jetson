@@ -32,7 +32,13 @@ RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirement
 # 3) Build the wheel (generates native bindings)
 ENV CUDACXX=/usr/local/cuda/bin/nvcc
 RUN cd /workspace/TensorRT-LLM && \
-    python3 scripts/build_wheel.py --target python
+    python3 scripts/build_wheel.py \
+      --build_type Release \
+      --binding_type pybind \
+      --cuda_architectures 87 \
+      --job_count $(nproc) \
+      --no-venv && \
+    python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
 
 # 4) Install the built wheel (again, no deps)
 RUN python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
