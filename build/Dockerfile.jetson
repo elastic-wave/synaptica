@@ -1,8 +1,5 @@
-#ARG L4T_TAG=r36.2.0
-#FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
-
-# Base image: latest JetPack container (Ubuntu 22.04, CUDA 12.2, TensorRT 10.x)
-FROM nvcr.io/nvidia/l4t-jetpack:6.0.0-devel
+ARG L4T_TAG=r36.2.0
+FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
 
 # Workdir setup
 WORKDIR /workspace
