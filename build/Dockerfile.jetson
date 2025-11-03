@@ -4,6 +4,17 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 WORKDIR /workspace
 
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gnupg curl && \
+    curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc \
+      | gpg --dearmor | tee /usr/share/keyrings/nvidia-jetson.gpg >/dev/null && \
+    printf "deb [signed-by=/usr/share/keyrings/nvidia-jetson.gpg] https://repo.download.nvidia.com/jetson/common %s main\n" "$L4T_SERIES" \
+      > /etc/apt/sources.list.d/nvidia-l4t.list && \
+    printf "deb [signed-by=/usr/share/keyrings/nvidia-jetson.gpg] https://repo.download.nvidia.com/jetson/t234 %s main\n" "$L4T_SERIES" \
+      >> /etc/apt/sources.list.d/nvidia-l4t.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends libnccl2 libnccl-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # System deps (add libnuma-dev!)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
@@ -56,9 +67,12 @@ RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true
 
 # Configure + build TRT-LLM wheel using system TensorRT in /usr, NCCL disabled
 RUN cd /workspace/TensorRT-LLM && \
+    python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" conan~=2.4 && \
+    conan profile detect --force || true && \
     python3 scripts/build_wheel.py \
       --clean \
-      --configure_cmake \
+      --build_type Release \
+      --job_count $(nproc) \
       --no-venv \
       --binding_type pybind \
       --cuda_architectures 87 \
@@ -69,9 +83,7 @@ RUN cd /workspace/TensorRT-LLM && \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
       --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
-    cmake --build /workspace/TensorRT-LLM/cpp/build -j"$(nproc)" && \
-    python3 scripts/build_wheel.py --no-venv --skip_building_wheel && \
-    python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+    python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
 
 
 CMD ["/bin/bash"]
