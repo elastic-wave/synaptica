@@ -1,41 +1,47 @@
-ARG L4T_TAG=r36.2.0
-FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
+FROM nvcr.io/nvidia/l4t-jetpack:r36.2.0
 
-# Workdir setup
+# Workdir
 WORKDIR /workspace
 
-# --- System tools and build essentials ---
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git cmake ninja-build python3 python3-pip python3-dev \
-    libnuma-dev libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev \
-    libnvparsers-dev && \
-    rm -rf /var/lib/apt/lists/*
+# --- System tools & build deps (lean) ---
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential \
+    git git-lfs \
+    python3 python3-pip python3-dev \
+    cmake \
+    ninja-build \
+    libnuma-dev \
+    libprotobuf-dev protobuf-compiler \
+    libcurl4-openssl-dev \
+    libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev libnvparsers-dev \
+    pybind11-dev \
+ && rm -rf /var/lib/apt/lists/*
 
-# --- Upgrade pip and install build tooling ---
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
-
-# --- Install cmake/ninja/conan (modern versions) ---
-RUN python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" "conan~=2.4"
-ENV CONAN_NON_INTERACTIVE=1
+# --- Modern CMake/Ninja/Conan in PATH ---
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel "cmake>=3.27" "ninja>=1.11" "conan~=2.4"
+ENV CONAN_NON_INTERACTIVE=1 \
+    CUDACXX=/usr/local/cuda/bin/nvcc
 RUN conan profile detect --force || true
 
-# --- Clone TensorRT-LLM repository ---
-RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM && \
-    cd /workspace/TensorRT-LLM && git submodule update --init --recursive
+# --- Fetch TensorRT‑LLM (with submodules) ---
+RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM
 
-# --- Make NCCL optional ---
-RUN sed -i 's/find_package(NCCL REQUIRED)/find_package(NCCL QUIET)/' /workspace/TensorRT-LLM/CMakeLists.txt
+# (Optional) pin to a known tag that works on r36.x
+# RUN --mount=type=bind,source=. ,target=/mnt/src :  # not needed; building in /workspace
+# RUN cd /workspace/TensorRT-LLM && git fetch --tags && git checkout v0.9.0 && git submodule update --init --recursive
 
-# --- Remove any PyPI TensorRT deps from requirements ---
+# --- Make NCCL optional in this checkout (some heads `REQUIRE` it) ---
+RUN sed -i 's/find_package(NCCL REQUIRED)/find_package(NCCL QUIET)/' /workspace/TensorRT-LLM/CMakeLists.txt || true
+
+# --- Prevent pip from trying to pull TensorRT wheels from PyPI ---
 RUN sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements.txt && \
     sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements-dev.txt
 
-# --- Install dev requirements (no deps to avoid JetPack override) ---
+# --- Pre‑install cleaned Python requirements (no deps, we use JetPack’s TRT in /usr) ---
 RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps && \
     python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements-dev.txt --no-deps
 
-# --- Build TensorRT‑LLM Wheel (Single GPU, No NCCL) ---
-ENV CUDACXX=/usr/local/cuda/bin/nvcc
+# --- Build & install TensorRT‑LLM wheel (Single‑GPU, NCCL disabled) ---
 RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
     cd /workspace/TensorRT-LLM && \
     python3 scripts/build_wheel.py \
@@ -51,11 +57,8 @@ RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
-      --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
-    python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+      --extra-cmake-vars BUILD_FLASH_MLA=OFF \
+    && python3 -m pip install --no-cache-dir /traveler/workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
 
-# --- Cleanup ---
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# --- Default CMD ---
-CMD ["python3"]
+# --- Default CMD for interactive use ---
+CMD ["bash"]
