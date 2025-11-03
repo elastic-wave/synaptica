@@ -42,7 +42,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ... in build/Dockerfile.jetson, before the wheel build ...
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnccl2 libnccl-dev \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Use system TensorRT from JetPack; force pybind; target Ampere (SM87) on Orin
