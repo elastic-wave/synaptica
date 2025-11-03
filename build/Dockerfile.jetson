@@ -1,69 +1,46 @@
-ARG L4T_TAG=r36.2.0
-FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
+#ARG L4T_TAG=r36.2.0
+#FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
 
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+# Base image: latest JetPack container (Ubuntu 22.04, CUDA 12.2, TensorRT 10.x)
+FROM nvcr.io/nvidia/l4t-jetpack:6.0.0-devel
 
+# Workdir setup
 WORKDIR /workspace
 
-# IMPORTANT: declare the series arg *after* FROM so it's visible in this stage
-ARG L4T_SERIES=r36.4
-
-# System deps (add libnuma-dev!)
+# --- System tools and build essentials ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv python3-dev \
-    git git-lfs build-essential cmake ninja-build \
-    libprotobuf-dev protobuf-compiler \
-    libcurl4-openssl-dev \
-    libnvinfer-dev libnvinfer-plugin-dev python3-libnvinfer \
-    pybind11-dev \
-    libnuma-dev \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+    build-essential git cmake ninja-build python3 python3-pip python3-dev \
+    libnuma-dev libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev \
+    libnvparsers-dev && \
+    rm -rf /var/lib/apt/lists/*
 
+# --- Upgrade pip and install build tooling ---
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Your repo
-COPY . /workspace
-
-# TensorRT-LLM (no PyPI tensorrt)
-RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM
-
-# Strip any tensorrt* from requirements to avoid PyPI
-RUN sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements.txt \
- && sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements-dev.txt
-
-# Preinstall cleaned requirements
-RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps \
- && python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements-dev.txt --no-deps
-
- # Newer CMake (>=3.27) from Kitware APT repo
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates gnupg && \
-    wget -O /tmp/kitware-archive.sh https://apt.kitware.com/kitware-archive.sh && \
-    bash /tmp/kitware-archive.sh && \
-    apt-get update && apt-get install -y --no-install-recommends \
-      cmake ninja-build && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# ... in build/Dockerfile.jetson, before the wheel build ...
-RUN apt-get update && apt-get install -y --no-install-recommends \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Make sure modern cmake/ninja are in PATH
-RUN python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" conan~=2.4
-
-ENV CUDACXX=/usr/local/cuda/bin/nvcc
+# --- Install cmake/ninja/conan (modern versions) ---
+RUN python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" "conan~=2.4"
 ENV CONAN_NON_INTERACTIVE=1
 RUN conan profile detect --force || true
 
-# Make NCCL optional in this TRT-LLM checkout
+# --- Clone TensorRT-LLM repository ---
+RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM && \
+    cd /workspace/TensorRT-LLM && git submodule update --init --recursive
+
+# --- Make NCCL optional ---
 RUN sed -i 's/find_package(NCCL REQUIRED)/find_package(NCCL QUIET)/' /workspace/TensorRT-LLM/CMakeLists.txt
 
-# Clear any stale CMake cache first
-RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true
+# --- Remove any PyPI TensorRT deps from requirements ---
+RUN sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements.txt && \
+    sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements-dev.txt
 
-# Configure + build TRT-LLM wheel using system TensorRT in /usr, NCCL disabled
-RUN cd /workspace/TensorRT-LLM && \
+# --- Install dev requirements (no deps to avoid JetPack override) ---
+RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps && \
+    python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements-dev.txt --no-deps
+
+# --- Build TensorRT‑LLM Wheel (Single GPU, No NCCL) ---
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
+    cd /workspace/TensorRT-LLM && \
     python3 scripts/build_wheel.py \
       --clean \
       --build_type Release \
@@ -73,13 +50,15 @@ RUN cd /workspace/TensorRT-LLM && \
       --cuda_architectures 87 \
       --trt_root /usr \
       --extra-cmake-vars CMAKE_PREFIX_PATH=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
-      --extra-cmake-vars CMAKE_DISABLE_FIND_PACKAGE_NCCL=ON \
       --extra-cmake-vars TRTLLM_USE_NCCL=OFF \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
-      --extra-cmake-vars BUILD_FLASH_MLA=OFF \
-    && python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
+      --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
+    python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
 
+# --- Cleanup ---
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-CMD ["/bin/bash"]
+# --- Default CMD ---
+CMD ["python3"]

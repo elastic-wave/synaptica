@@ -227,3 +227,4 @@ logs/
 .env
 *.token
 notes.txt
+more_notes.txt
