@@ -1,7 +1,7 @@
 #first time setup
 cd projects/synaptica
 python3 -m venv .venv
-
+source .venv/bin/activate
 
 #run
 

@@ -1,5 +1,4 @@
 # build/Dockerfile.jetson
-# Use the JetPack image that matches your L4T series. For 36.4.x, 36.3.0 is fine.
 ARG L4T_TAG=r36.2.0
 FROM nvcr.io/nvidia/l4t-jetpack:${L4T_TAG}
 
@@ -7,24 +6,35 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 WORKDIR /workspace
 
-# OS deps (lean + cleanup)
+# System deps (keep it lean; clean APT cache)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
-    git build-essential cmake ninja-build \
+    git git-lfs build-essential cmake ninja-build \
     libprotobuf-dev protobuf-compiler \
     libcurl4-openssl-dev \
+    libnvinfer-dev libnvinfer-plugin-dev python3-libnvinfer \
+    pybind11-dev \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy repo
+# Python deps (no cache)
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Your repo context
 COPY . /workspace
 
-# Python deps (NO pip tensorrt!)
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
- && python3 -m pip install --no-cache-dir numpy onnx onnxsim transformers tokenizers requests
+# ---- TensorRT-LLM from source (NO PyPI tensorrt) ----
+# 1) Clone with submodules (bindings live in submodules)
+RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM
 
-# Install TensorRT-LLM WITHOUT deps so it won’t try to pull 'tensorrt' from PyPI
-RUN git clone --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM \
- && python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps \
- && python3 -m pip install --no-cache-dir -e /workspace/TensorRT-LLM --no-deps
+# 2) Install python requirements WITHOUT deps so pip won't fetch 'tensorrt' from PyPI
+RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps
+
+# 3) Build the wheel (generates native bindings)
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+RUN cd /workspace/TensorRT-LLM && \
+    python3 scripts/build_wheel.py --target python
+
+# 4) Install the built wheel (again, no deps)
+RUN python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
 
 CMD ["/bin/bash"]
