@@ -48,14 +48,16 @@ ENV CUDACXX=/usr/local/cuda/bin/nvcc
 ENV CONAN_NON_INTERACTIVE=1
 RUN conan profile detect --force || true
 
+# Build & install TensorRT-LLM wheel (Jetson: use system TRT in /usr)
 RUN cd /workspace/TensorRT-LLM && \
     python3 scripts/build_wheel.py \
+      --clean \
       --build_type Release \
       --job_count $(nproc) \
       --no-venv \
       --binding_type pybind \
       --cuda_architectures 87 \
-      --extra-cmake-vars TensorRT_ROOT=/usr \
+      --trt_root /usr \
       --extra-cmake-vars CMAKE_PREFIX_PATH=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
       --extra-cmake-vars TRTLLM_USE_NCCL=OFF \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
