@@ -44,16 +44,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN apt-get update && apt-get install -y --no-install-recommends \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Make sure modern cmake/ninja are in PATH
+RUN python3 -m pip install --no-cache-dir "cmake>=3.27" "ninja>=1.11" conan~=2.4
+
 ENV CUDACXX=/usr/local/cuda/bin/nvcc
 ENV CONAN_NON_INTERACTIVE=1
 RUN conan profile detect --force || true
 
-# Build & install TensorRT-LLM wheel (Jetson: use system TRT in /usr)
+# Clear any stale CMake cache first
+RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true
+
+# Configure + build TRT-LLM wheel using system TensorRT in /usr, NCCL disabled
 RUN cd /workspace/TensorRT-LLM && \
     python3 scripts/build_wheel.py \
       --clean \
-      --build_type Release \
-      --job_count $(nproc) \
+      --configure_cmake \
       --no-venv \
       --binding_type pybind \
       --cuda_architectures 87 \
@@ -63,7 +68,10 @@ RUN cd /workspace/TensorRT-LLM && \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
-      --extra-cmake-vars BUILD_FLASH_MLA=OFF \
-    && python3 -m pip install --no-cache-dir dist/tensorrt_llm-*.whl --no-deps
+      --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
+    cmake --build /workspace/TensorRT-LLM/cpp/build -j"$(nproc)" && \
+    python3 scripts/build_wheel.py --no-venv --skip_building_wheel && \
+    python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+
 
 CMD ["/bin/bash"]
