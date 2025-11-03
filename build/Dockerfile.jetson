@@ -30,6 +30,10 @@ RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /
 # RUN --mount=type=bind,source=. ,target=/mnt/src :  # not needed; building in /workspace
 # RUN cd /workspace/TensorRT-LLM && git fetch --tags && git checkout v0.9.0 && git submodule update --init --recursive
 
+# Patch every occurrence of 'find_package(NCCL REQUIRED)' across the repo
+RUN grep -Rn "find_package( *NCCL" /workspace/TensorRT-LLM || true && \
+    sed -i -E 's/find_package\(\s*NCCL\s+REQUIRED\s*\)/find_package(NCCL QUIET)/g' $(grep -RIl "find_package( *NCCL" /workspace/TensorRT-LLM)
+
 # --- Make NCCL optional in this checkout (some heads `REQUIRE` it) ---
 RUN sed -i 's/find_package(NCCL REQUIRED)/find_package(NCCL QUIET)/' /workspace/TensorRT-LLM/CMakeLists.txt || true
 
@@ -58,7 +62,7 @@ RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
       --extra-cmake-vars BUILD_FLASH_MLA=OFF \
-    && python3 -m pip install --no-cache-dir /traveler/workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+    && python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
 
 # --- Default CMD for interactive use ---
 CMD ["bash"]
