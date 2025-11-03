@@ -23,29 +23,22 @@ ENV CONAN_NON_INTERACTIVE=1 \
     CUDACXX=/usr/local/cuda/bin/nvcc
 RUN conan profile detect --force || true
 
-# --- Fetch TensorRT‑LLM (with submodules) ---
+# --- Fetch TensorRT-LLM (with submodules) ---
 RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM
 
-# (Optional) pin to a known tag that works on r36.x
-# RUN --mount=type=bind,source=. ,target=/mnt/src :  # not needed; building in /workspace
-# RUN cd /workspace/TensorRT-LLM && git fetch --tags && git checkout v0.9.0 && git submodule update --init --recursive
-
-# Patch every occurrence of 'find_package(NCCL REQUIRED)' across the repo
+# --- Make NCCL optional everywhere (some sub-CMake files also require it) ---
 RUN grep -Rn "find_package( *NCCL" /workspace/TensorRT-LLM || true && \
     sed -i -E 's/find_package\(\s*NCCL\s+REQUIRED\s*\)/find_package(NCCL QUIET)/g' $(grep -RIl "find_package( *NCCL" /workspace/TensorRT-LLM)
-
-# --- Make NCCL optional in this checkout (some heads `REQUIRE` it) ---
-RUN sed -i 's/find_package(NCCL REQUIRED)/find_package(NCCL QUIET)/' /workspace/TensorRT-LLM/CMakeLists.txt || true
 
 # --- Prevent pip from trying to pull TensorRT wheels from PyPI ---
 RUN sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements.txt && \
     sed -i '/^tensorrt[_a-zA-Z0-9-]*/d' /workspace/TensorRT-LLM/requirements-dev.txt
 
-# --- Pre‑install cleaned Python requirements (no deps, we use JetPack’s TRT in /usr) ---
+# --- Pre-install cleaned Python requirements (no deps; use JetPack TRT in /usr) ---
 RUN python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements.txt --no-deps && \
     python3 -m pip install --no-cache-dir -r /workspace/TensorRT-LLM/requirements-dev.txt --no-deps
 
-# --- Build & install TensorRT‑LLM wheel (Single‑GPU, NCCL disabled) ---
+# --- Build & install TensorRT-LLM wheel (Single-GPU, NCCL disabled) ---
 RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
     cd /workspace/TensorRT-LLM && \
     python3 scripts/build_wheel.py \
@@ -61,8 +54,9 @@ RUN rm -rf /workspace/TensorRT-LLM/cpp/build || true && \
       --extra-cmake-vars TRTLLM_ENABLE_MULTI_GPU=OFF \
       --extra-cmake-vars BUILD_DEEP_GEMM=OFF \
       --extra-cmake-vars BUILD_DEEP_EP=OFF \
-      --extra-cmake-vars BUILD_FLASH_MLA=OFF \
-    && python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+      --extra-cmake-vars BUILD_FLASH_MLA=OFF && \
+    python3 -m pip install --no-cache-dir /workspace/TensorRT-LLM/dist/tensorrt_llm-*.whl --no-deps
+
 
 # --- Default CMD for interactive use ---
 CMD ["bash"]
