@@ -49,9 +49,12 @@ RUN mkdir -p build && cd build && \
       .. && \
     ninja
 
+    # Verify that the Python bindings were built
+RUN ls -al /opt/TensorRT-LLM/build/python || (echo "❌ Python build folder missing!" && exit 1)
+
 # Expose the freshly-built Python package to the interpreter
 # (This branch doesn’t always produce a wheel out-of-the-box; using PYTHONPATH is reliable.)
-ENV PYTHONPATH=/opt/TensorRT-LLM/build/python:$PYTHONPATH
+ENV PYTHONPATH=/opt/TensorRT-LLM/build/python
 
 # Convenience: install a tiny set of CLI tools many workflows use
 RUN python3 -m pip install --no-cache-dir \
