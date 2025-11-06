@@ -56,14 +56,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (also install the Python wheel so `import pybind11` works in CMake checks)
 RUN python3 -m pip install --no-cache-dir pybind11
 
-# ---- Build C++ core + Python bindings WITHOUT NCCL ----
-# NOTE: The top-level doesn't have CMakeLists.txt; it's in cpp/
-# Key flags:
-#   -DENABLE_MULTI_DEVICE=OFF   => keeps NCCL/distributed out
-#   -DCMAKE_CUDA_ARCHITECTURES=87  => Orin Nano (Ampere SM 8.7)
-#   -DBUILD_PYTHON=ON           => build Python extensions
-#   -DBUILD_TESTS=OFF, -DTRTLLM_BUILD_EXAMPLES=OFF => faster, leaner
-RUN mkdir -p build && cd build && \
+# Remove old distro pybind11 and install a newer pip version
+RUN apt-get update && apt-get remove -y python3-pybind11 pybind11-dev && \
+    apt-get install -y --no-install-recommends python3-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
+
+# Build (query pybind11 CMake dir at build time)
+RUN rm -rf build && mkdir -p build && cd build && \
+    PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
     cmake -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_PYTHON=ON \
@@ -72,6 +73,8 @@ RUN mkdir -p build && cd build && \
       -DTRTLLM_ENABLE_NVTX=OFF \
       -DENABLE_MULTI_DEVICE=OFF \
       -DCMAKE_CUDA_ARCHITECTURES=87 \
+      -Dpybind11_DIR="$PYBIND11_DIR" \
+      -DPython3_EXECUTABLE=/usr/bin/python3 \
       ../cpp && \
     ninja && \
     echo "✅ TensorRT-LLM build complete."
