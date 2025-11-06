@@ -64,19 +64,24 @@ RUN apt-get update && apt-get remove -y python3-pybind11 pybind11-dev && \
 
 # Build (query pybind11 CMake dir at build time)
 RUN rm -rf build && mkdir -p build && cd build && \
-    PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
-    cmake -G Ninja \
+  PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
+  set -euxo pipefail && \
+  cmake -S ../cpp -B . \
     -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_PYTHON=ON \
-    -DBUILD_TESTS=OFF \
-    -DTRTLLM_BUILD_EXAMPLES=OFF \
-    -DTRTLLM_ENABLE_NVTX=OFF \
-    -DENABLE_MULTI_DEVICE=OFF \
-    -DCMAKE_CUDA_ARCHITECTURES=87 \
+    -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
+    -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
+    -DENABLE_MULTI_DEVICE=OFF -DCMAKE_CUDA_ARCHITECTURES=87 \
     -DPYBIND11_FINDPYTHON=OFF \
-    -Dpybind11_DIR="$PYBIND11_DIR" \
     -DPython3_EXECUTABLE=/usr/bin/python3 \
-    ../cpp && ninja && echo "✅ TensorRT-LLM build complete."
+    -Dpybind11_DIR="$PYBIND11_DIR" \
+    -Wdev --debug-find --trace-expand \
+  || { echo '--- CMakeError.log ---'; \
+       test -f CMakeFiles/CMakeError.log && sed -n '1,300p' CMakeFiles/CMakeError.log; \
+       echo '--- CMakeOutput.log ---'; \
+       test -f CMakeFiles/CMakeOutput.log && sed -n '1,200p' CMakeFiles/CMakeOutput.log; \
+       exit 1; } && \
+  ninja && echo "✅ TensorRT-LLM build complete."
+
 
 # Make sure the built shared libs are discoverable at runtime
 ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH

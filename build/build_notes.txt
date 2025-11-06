@@ -25,3 +25,19 @@ cp build/torch-2.6.0-cp310-cp310-linux_aarch64.whl .
 docker run --rm -it --gpus all --ipc=host \
   -v $PWD:/workspace \
   trtllm-jetson-nonccl:0.12
+
+
+  #debugging build errors - run from cmmonad prompt with the container (if it built)
+
+  docker run --rm -it trtllm-jetson-nonccl:0.12 /bin/bash
+cd /opt/TensorRT-LLM && rm -rf build && mkdir build && cd build
+
+cmake -S ../cpp -B . \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
+  -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
+  -DENABLE_MULTI_DEVICE=OFF -DCMAKE_CUDA_ARCHITECTURES=87 \
+  -DPython3_EXECUTABLE=/usr/bin/python3 \
+  -Dpybind11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") \
+  -Wdev --debug-find --trace-expand
+
