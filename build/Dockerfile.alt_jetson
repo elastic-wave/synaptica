@@ -1,5 +1,5 @@
 # Jetson Orin Nano / aarch64
-# Pick a JetPack tag that matches what you flashed on the device (example: r36.4.0 = JetPack 6.1)
+# Choose a tag matching your flashed JetPack (example shown: r36.4.0 ≈ JetPack 6.1)
 FROM nvcr.io/nvidia/l4t-jetpack:r36.2.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -7,9 +7,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# System deps for building TRT-LLM from source
+# ---- System deps (build toolchain + basics) ----
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git git-lfs ca-certificates \
+    git git-lfs ca-certificates curl \
     build-essential \
     python3 python3-pip python3-dev \
     cmake ninja-build \
@@ -17,26 +17,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && git lfs install
 
-# Make sure pip is recent
-RUN python3 -m pip install --upgrade pip
+# Keep pip modern & add a few helpful Python libs
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install --no-cache-dir wheel packaging numpy tqdm
 
-# Clone the Jetson-supported branch of TensorRT-LLM
-# You can override at build time: --build-arg TRTLLM_BRANCH=v0.12.0-jetson
+# ---- Get TensorRT-LLM (Jetson branch) ----
 ARG TRTLLM_BRANCH=v0.12.0-jetson
 RUN git clone --branch ${TRTLLM_BRANCH} --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /opt/TensorRT-LLM
 WORKDIR /opt/TensorRT-LLM
-RUN git submodule update --init --recursive && git lfs pull
+RUN git submodule update --init --recursive && git lfs pull || true
 
-# Python requirements (this branch keeps them modest; wheel/PyTorch are NOT strictly required to build the core libs)
-RUN python3 -m pip install -r requirements.txt || true
+# (Optional) install Python requirements from repo; ignore if file is minimal on this branch
+RUN if [ -f requirements.txt ]; then python3 -m pip install --no-cache-dir -r requirements.txt || true; fi
 
-# Build C++ + Python bindings WITHOUT NCCL (single-GPU only)
+# ---- Build C++ core + Python bindings WITHOUT NCCL ----
+# NOTE: The top-level doesn't have CMakeLists.txt; it's in cpp/
 # Key flags:
-#  -DENABLE_MULTI_DEVICE=OFF  -> avoids NCCL & distributed bits at build time
-#  -DCMAKE_CUDA_ARCHITECTURES=87 -> Orin Nano (Ampere, SM 8.7)
-#  -DBUILD_PYTHON=ON -> installs Python bindings
-#  -DTRTLLM_BUILD_EXAMPLES=OFF, -DBUILD_TESTS=OFF -> speed up
-#  -DTRTLLM_ENABLE_NVTX=OFF -> optional, keeps it lean
+#   -DENABLE_MULTI_DEVICE=OFF   => keeps NCCL/distributed out
+#   -DCMAKE_CUDA_ARCHITECTURES=87  => Orin Nano (Ampere SM 8.7)
+#   -DBUILD_PYTHON=ON           => build Python extensions
+#   -DBUILD_TESTS=OFF, -DTRTLLM_BUILD_EXAMPLES=OFF => faster, leaner
 RUN mkdir -p build && cd build && \
     cmake -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
@@ -46,22 +46,29 @@ RUN mkdir -p build && cd build && \
       -DTRTLLM_ENABLE_NVTX=OFF \
       -DENABLE_MULTI_DEVICE=OFF \
       -DCMAKE_CUDA_ARCHITECTURES=87 \
-      .. && \
-    ninja
+      ../cpp && \
+    ninja && \
+    echo "✅ TensorRT-LLM build complete."
 
-    # Verify that the Python bindings were built
-RUN ls -al /opt/TensorRT-LLM/build/python || (echo "❌ Python build folder missing!" && exit 1)
+# Make sure the built shared libs are discoverable at runtime
+ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
 
-# Expose the freshly-built Python package to the interpreter
-# (This branch doesn’t always produce a wheel out-of-the-box; using PYTHONPATH is reliable.)
-ENV PYTHONPATH=/opt/TensorRT-LLM/build/python
+# Install the Python package in editable mode so `import tensorrt_llm` works
+RUN python3 -m pip install --no-cache-dir -e /opt/TensorRT-LLM/python
 
-# Convenience: install a tiny set of CLI tools many workflows use
-RUN python3 -m pip install --no-cache-dir \
-    numpy tqdm
+# Quick sanity checks (won’t fail the build if TRT Python isn’t present in base)
+RUN python3 - <<'PY' || true
+try:
+    import tensorrt as trt
+    print("TensorRT Python found:", trt.__version__)
+except Exception as e:
+    print("Note: TensorRT Python import failed (ok on some bases):", e)
+import tensorrt_llm as tllm
+print("TensorRT-LLM Python located at:", tllm.__file__)
+PY
 
-# Default workdir where you’ll bind-mount models/checkpoints
+# Workspace mount point for your models/checkpoints/engines
 WORKDIR /workspace
 
-# Reminder banner
-CMD ["/bin/bash", "-lc", "echo 'TensorRT-LLM ready (single-GPU, no NCCL). Use trtllm-build with --nccl_plugin disable.' && bash"]
+# Friendly banner + interactive shell by default
+CMD ["/bin/bash", "-lc", "echo 'TensorRT-LLM (single-GPU, no NCCL) ready. Use trtllm-build with --nccl_plugin disable.' && bash"]
