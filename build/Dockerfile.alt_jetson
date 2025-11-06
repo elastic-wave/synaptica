@@ -65,7 +65,7 @@ RUN apt-get update && apt-get remove -y python3-pybind11 pybind11-dev && \
 # Build (query pybind11 CMake dir at build time)
 RUN rm -rf build && mkdir -p build && cd build && \
   PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
-  set -euxo pipefail && \
+  set -eux && \
   cmake -S ../cpp -B . \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
@@ -81,7 +81,6 @@ RUN rm -rf build && mkdir -p build && cd build && \
        test -f CMakeFiles/CMakeOutput.log && sed -n '1,200p' CMakeFiles/CMakeOutput.log; \
        exit 1; } && \
   ninja && echo "✅ TensorRT-LLM build complete."
-
 
 # Make sure the built shared libs are discoverable at runtime
 ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
