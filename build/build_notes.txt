@@ -1,0 +1,7 @@
+# On the Jetson Orin Nano (with JetPack 6.x), build the image:
+docker build -t trtllm-jetson-nonccl:0.12 --build-arg TRTLLM_BRANCH=v0.12.0-jetson -f build/Dockerfile.alt_jetson .
+
+# Run it with the NVIDIA runtime and host IPC (TRT-LLM recommends --ipc=host):
+docker run --rm -it --gpus all --ipc=host \
+  -v $PWD:/workspace \
+  trtllm-jetson-nonccl:0.12
