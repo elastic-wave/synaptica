@@ -1,0 +1,55 @@
+##############################################
+# Stage 1 — Build TensorRT-LLM
+##############################################
+FROM dustynv/l4t-tensorrt:r36.4.0 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Basic build deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake ninja-build python3-dev python3-pip \
+    build-essential pkg-config libprotobuf-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# pybind11, CMake update (optional), etc.
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
+
+# Clone TensorRT-LLM
+ARG TRTLLM_BRANCH=v0.12.0-jetson
+RUN git clone --branch ${TRTLLM_BRANCH} --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /opt/TensorRT-LLM
+WORKDIR /opt/TensorRT-LLM
+RUN git submodule update --init --recursive || true
+
+# Build TensorRT-LLM
+RUN rm -rf build && mkdir -p build && cd build && \
+    PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
+    cmake -S ../cpp -B . \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
+      -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
+      -DENABLE_MULTI_DEVICE=OFF -DCMAKE_CUDA_ARCHITECTURES=87 \
+      -DPYBIND11_FINDPYTHON=OFF \
+      -DPython3_EXECUTABLE=/usr/bin/python3 \
+      -Dpybind11_DIR="$PYBIND11_DIR" && \
+    ninja
+
+##############################################
+# Stage 2 — Runtime (PyTorch + built TensorRT-LLM)
+##############################################
+FROM dustynv/l4t-pytorch:r36.4.0
+
+# Copy built TensorRT-LLM from previous stage
+COPY --from=builder /opt/TensorRT-LLM /opt/TensorRT-LLM
+
+# Install the Python bindings in editable mode
+RUN python3 -m pip install --no-cache-dir -e /opt/TensorRT-LLM/python
+
+# Runtime path for shared libs
+ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

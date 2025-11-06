@@ -18,6 +18,9 @@ curl -L --retry 10 --retry-delay 5 --connect-timeout 60 --max-time 0 -o build/to
 # then copy to project root before runing build
 cp build/torch-2.6.0-cp310-cp310-linux_aarch64.whl .
 
+# two step build
+docker build --network=host -t trtllm-jetson-nonccl:0.12   --build-arg TRTLLM_BRANCH=v0.12.0-jetson -f build/Dockerfile.alt_jetson .
+
 
 
 
