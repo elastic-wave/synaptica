@@ -1,0 +1,64 @@
+# Jetson Orin Nano / aarch64
+# Pick a JetPack tag that matches what you flashed on the device (example: r36.4.0 = JetPack 6.1)
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# System deps for building TRT-LLM from source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git git-lfs ca-certificates \
+    build-essential \
+    python3 python3-pip python3-dev \
+    cmake ninja-build \
+    libprotobuf-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/* \
+    && git lfs install
+
+# Make sure pip is recent
+RUN python3 -m pip install --upgrade pip
+
+# Clone the Jetson-supported branch of TensorRT-LLM
+# You can override at build time: --build-arg TRTLLM_BRANCH=v0.12.0-jetson
+ARG TRTLLM_BRANCH=v0.12.0-jetson
+RUN git clone --branch ${TRTLLM_BRANCH} --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /opt/TensorRT-LLM
+WORKDIR /opt/TensorRT-LLM
+RUN git submodule update --init --recursive && git lfs pull
+
+# Python requirements (this branch keeps them modest; wheel/PyTorch are NOT strictly required to build the core libs)
+RUN python3 -m pip install -r requirements.txt || true
+
+# Build C++ + Python bindings WITHOUT NCCL (single-GPU only)
+# Key flags:
+#  -DENABLE_MULTI_DEVICE=OFF  -> avoids NCCL & distributed bits at build time
+#  -DCMAKE_CUDA_ARCHITECTURES=87 -> Orin Nano (Ampere, SM 8.7)
+#  -DBUILD_PYTHON=ON -> installs Python bindings
+#  -DTRTLLM_BUILD_EXAMPLES=OFF, -DBUILD_TESTS=OFF -> speed up
+#  -DTRTLLM_ENABLE_NVTX=OFF -> optional, keeps it lean
+RUN mkdir -p build && cd build && \
+    cmake -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_PYTHON=ON \
+      -DBUILD_TESTS=OFF \
+      -DTRTLLM_BUILD_EXAMPLES=OFF \
+      -DTRTLLM_ENABLE_NVTX=OFF \
+      -DENABLE_MULTI_DEVICE=OFF \
+      -DCMAKE_CUDA_ARCHITECTURES=87 \
+      .. && \
+    ninja
+
+# Expose the freshly-built Python package to the interpreter
+# (This branch doesn’t always produce a wheel out-of-the-box; using PYTHONPATH is reliable.)
+ENV PYTHONPATH=/opt/TensorRT-LLM/build/python:$PYTHONPATH
+
+# Convenience: install a tiny set of CLI tools many workflows use
+RUN python3 -m pip install --no-cache-dir \
+    numpy tqdm
+
+# Default workdir where you’ll bind-mount models/checkpoints
+WORKDIR /workspace
+
+# Reminder banner
+CMD ["/bin/bash", "-lc", "echo 'TensorRT-LLM ready (single-GPU, no NCCL). Use trtllm-build with --nccl_plugin disable.' && bash"]
