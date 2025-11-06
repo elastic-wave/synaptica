@@ -1,5 +1,24 @@
 # On the Jetson Orin Nano (with JetPack 6.x), build the image:
-docker build -t trtllm-jetson-nonccl:0.12 --build-arg TRTLLM_BRANCH=v0.12.0-jetson --build-arg TORCH_WHL_URL=https://pypi.jetson-ai-lab.io/jp6/cu126/+f/6cc/6ecfe8a5994fd/torch-2.6.0-cp310-cp310-linux_aarch64.whl -f build/Dockerfile.alt_jetson .
+# docker build -t trtllm-jetson-nonccl:0.12 --build-arg TRTLLM_BRANCH=v0.12.0-jetson --build-arg TORCH_WHL_URL=https://pypi.jetson-ai-lab.io/jp6/cu126/+f/6cc/6ecfe8a5994fd/torch-2.6.0-cp310-cp310-linux_aarch64.whl -f build/Dockerfile.alt_jetson .
+
+#note: don't pass the url on the build anymore - the file was moved so need to load from local download
+
+docker build --network=host -t trtllm-jetson-nonccl:0.12   --build-arg TRTLLM_BRANCH=v0.12.0-jetson -f build/Dockerfile.alt_jetson .
+
+
+
+# download the whl file directly to local
+
+# download the torch file and access it locally (build will copy from /projects/synaptica folder)
+# see https://pypi.jetson-ai-lab.io/jp6/cu126/torch/2.8.0
+
+URL='https://pypi.jetson-ai-lab.io/jp6/cu126/+f/62a/1beee9f2f1470/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=62a1beee9f2f147076a974d2942c90060c12771c94740830327cae705b2595fc'
+curl -L --retry 10 --retry-delay 5 --connect-timeout 60 --max-time 0 -o build/torch-2.6.0-cp310-cp310-linux_aarch64.whl "$URL"
+
+# then copy to project root before runing build
+cp build/torch-2.6.0-cp310-cp310-linux_aarch64.whl .
+
+
 
 
 # Run it with the NVIDIA runtime and host IPC (TRT-LLM recommends --ipc=host):

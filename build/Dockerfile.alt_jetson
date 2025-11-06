@@ -48,6 +48,14 @@ RUN git submodule update --init --recursive && git lfs pull || true
 # (Optional) install Python requirements from repo; ignore if file is minimal on this branch
 RUN if [ -f requirements.txt ]; then python3 -m pip install --no-cache-dir -r requirements.txt || true; fi
 
+# pybind11 for both CMake and Python import
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      pybind11-dev python3-pybind11 \
+    && rm -rf /var/lib/apt/lists/*
+
+# (also install the Python wheel so `import pybind11` works in CMake checks)
+RUN python3 -m pip install --no-cache-dir pybind11
+
 # ---- Build C++ core + Python bindings WITHOUT NCCL ----
 # NOTE: The top-level doesn't have CMakeLists.txt; it's in cpp/
 # Key flags:
