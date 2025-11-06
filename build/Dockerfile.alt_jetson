@@ -18,9 +18,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && git lfs install
 
-# Keep pip modern & add a few helpful Python libs
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install --no-cache-dir wheel packaging numpy tqdm
+    # Make PyPI the default; don’t inherit a custom mirror
+ENV PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_EXTRA_INDEX_URL=
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_DEFAULT_TIMEOUT=120
+
+    # General deps come from PyPI
+RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 300 \
+    pip setuptools wheel packaging numpy tqdm
+
+# Install Jetson PyTorch via direct wheel (URL you pass at build time)
+# (A direct .whl URL ignores index settings, so it won’t hit the mirror.)
+ARG TORCH_WHL_URL
+RUN test -n "$TORCH_WHL_URL" && \
+    python3 -m pip install --no-cache-dir --retries 5 --timeout 300 "$TORCH_WHL_URL"
+
 
 # ---- Get TensorRT-LLM (Jetson branch) ----
 ARG TRTLLM_BRANCH=v0.12.0-jetson
