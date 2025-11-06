@@ -26,6 +26,19 @@ RUN conan profile detect --force || true
 # --- Fetch TensorRT-LLM (with submodules) ---
 RUN git clone --recursive --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /workspace/TensorRT-LLM
 
+# Make ALL NCCL lookups optional across the repo (guards every CMakeLists.txt)
+RUN python3 - <<'PY'
+import re, pathlib
+root = pathlib.Path("/workspace/TensorRT-LLM")
+pattern = re.compile(r"find_package\(\s*NCCL(?:\s+REQUIRED)?\s*\)", re.IGNORECASE)
+for cmake in list(root.rglob("CMakeLists.txt")) + list(root.rglob("*.cmake")):
+    s = cmake.read_text()
+    new = pattern.sub("if(DEFINED TRTLLM_USE_NCCL AND TRTLLM_USE_NCCL)\n  find_package(NCCL REQUIRED)\nendif()", s)
+    if new != s:
+        cmake.write_text(new)
+        print("Patched:", cmake)
+PY
+
 # --- Make NCCL optional everywhere (some sub-CMake files also require it) ---
 RUN grep -Rn "find_package( *NCCL" /workspace/TensorRT-LLM || true && \
     sed -i -E 's/find_package\(\s*NCCL\s+REQUIRED\s*\)/find_package(NCCL QUIET)/g' $(grep -RIl "find_package( *NCCL" /workspace/TensorRT-LLM)
