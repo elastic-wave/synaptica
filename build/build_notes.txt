@@ -20,7 +20,7 @@ cp build/torch-2.6.0-cp310-cp310-linux_aarch64.whl .
 
 # two step build
 docker build --network=host -t trtllm-jetson-nonccl:0.12   --build-arg TRTLLM_BRANCH=v0.12.0-jetson -f build/Dockerfile.twostep .
-docker build -t trtllm-jetson-multistage:0.12 -f Dockerfile.twostep .
+docker build -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep  .
 
 
 

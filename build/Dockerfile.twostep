@@ -16,23 +16,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* && git lfs install
 
 # Add NVIDIA Jetson APT repos (for TRT/cuDNN dev packages on r36.4)
-RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg && \
-    curl -fsSL https://repo.download.nvidia.com/jetson/doc/jetson-ota-public.asc \
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg ca-certificates && \
+    curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc \
       | gpg --dearmor -o /usr/share/keyrings/nvidia-jetson-archive-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/common r36.4 main" \
       > /etc/apt/sources.list.d/nvidia-jetson.list && \
     echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/t234 r36.4 main" \
       >> /etc/apt/sources.list.d/nvidia-jetson.list && \
-    apt-get update
+    apt-get update || true
 
 # Install TensorRT + cuDNN dev headers/libs (names differ across JP, try both)
 RUN set -eux; \
     apt-get install -y --no-install-recommends \
-      libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev libnvparsers-dev || true; \
-    apt-get install -y --no-install-recommends tensorrt-dev || true; \
-    apt-get install -y --no-install-recommends libcudnn9 libcudnn9-dev || \
-    apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev; \
-    rm -rf /var/lib/apt/lists/*
+      libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev libnvparsers-dev \
+   || apt-get install -y --no-install-recommends tensorrt-dev || true && \
+   apt-get install -y --no-install-recommends libcudnn9 libcudnn9-dev \
+   || apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev && \
+   rm -rf /var/lib/apt/lists/*
 
 # Pip tooling and pybind11 (newer than Ubuntu’s)
 ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
