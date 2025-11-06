@@ -1,7 +1,7 @@
 # Jetson Orin Nano / aarch64
 # Choose a tag matching your flashed JetPack (example shown: r36.4.0 ≈ JetPack 6.1)
 #FROM nvcr.io/nvidia/l4t-jetpack:r36.2.0
-FROM nvcr.io/nvidia/l4t-pytorch:r36.4.0-pth2.4-py3
+FROM dustynv/l4t-pytorch:r36.4.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
