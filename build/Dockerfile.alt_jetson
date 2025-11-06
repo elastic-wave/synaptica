@@ -62,25 +62,35 @@ RUN apt-get update && apt-get remove -y python3-pybind11 pybind11-dev && \
     rm -rf /var/lib/apt/lists/* && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
+    # TensorRT + cuDNN development headers/libs for JP 6.2 (L4T r36.4)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnvinfer-dev libnvinfer-plugin-dev \
+    libnvonnxparsers-dev libnvparsers-dev \
+    libcudnn8 libcudnn8-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+  # sanity check
+RUN ls -l /usr/include/aarch64-linux-gnu/NvInfer.h && \
+    ls -l /usr/lib/aarch64-linux-gnu/libnvinfer.so && \
+    ls -l /usr/include/aarch64-linux-gnu/cudnn*.h && \
+    ls -l /usr/lib/aarch64-linux-gnu/libcudnn*.so
+
 # Build (query pybind11 CMake dir at build time)
 RUN rm -rf build && mkdir -p build && cd build && \
-  PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
-  set -eux && \
-  cmake -S ../cpp -B . \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
-    -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
-    -DENABLE_MULTI_DEVICE=OFF -DCMAKE_CUDA_ARCHITECTURES=87 \
-    -DPYBIND11_FINDPYTHON=OFF \
-    -DPython3_EXECUTABLE=/usr/bin/python3 \
-    -Dpybind11_DIR="$PYBIND11_DIR" \
-    -Wdev --debug-find --trace-expand \
-  || { echo '--- CMakeError.log ---'; \
-       test -f CMakeFiles/CMakeError.log && sed -n '1,300p' CMakeFiles/CMakeError.log; \
-       echo '--- CMakeOutput.log ---'; \
-       test -f CMakeFiles/CMakeOutput.log && sed -n '1,200p' CMakeFiles/CMakeOutput.log; \
-       exit 1; } && \
-  ninja && echo "✅ TensorRT-LLM build complete."
+    PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
+    cmake -S ../cpp -B . \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
+      -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
+      -DENABLE_MULTI_DEVICE=OFF -DCMAKE_CUDA_ARCHITECTURES=87 \
+      -DPYBIND11_FINDPYTHON=OFF \
+      -DPython3_EXECUTABLE=/usr/bin/python3 \
+      -Dpybind11_DIR="$PYBIND11_DIR" \
+      -DTensorRT_DIR=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
+      -DTRT_LIB_DIR=/usr/lib/aarch64-linux-gnu \
+      -DTRT_INCLUDE_DIRS=/usr/include/aarch64-linux-gnu \
+      -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda && \
+    ninja -v && echo "✅ TensorRT-LLM build complete."
 
 # Make sure the built shared libs are discoverable at runtime
 ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
