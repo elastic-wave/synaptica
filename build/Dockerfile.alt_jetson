@@ -66,16 +66,18 @@ RUN apt-get update && apt-get remove -y python3-pybind11 pybind11-dev && \
 RUN rm -rf build && mkdir -p build && cd build && \
     PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
     cmake -G Ninja \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_PYTHON=ON \
-      -DBUILD_TESTS=OFF \
-      -DTRTLLM_BUILD_EXAMPLES=OFF \
-      -DTRTLLM_ENABLE_NVTX=OFF \
-      -DENABLE_MULTI_DEVICE=OFF \
-      -DCMAKE_CUDA_ARCHITECTURES=87 \
-      -Dpybind11_DIR="$PYBIND11_DIR" \
-      -DPython3_EXECUTABLE=/usr/bin/python3 \
-      ../cpp && \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_PYTHON=ON \
+    -DBUILD_TESTS=OFF \
+    -DTRTLLM_BUILD_EXAMPLES=OFF \
+    -DTRTLLM_ENABLE_NVTX=OFF \
+    -DENABLE_MULTI_DEVICE=OFF \
+    -DCMAKE_CUDA_ARCHITECTURES=87 \
+    +  -DPYBIND11_FINDPYTHON=OFF \
+    -Dpybind11_DIR="$PYBIND11_DIR" \
+    -DPython3_EXECUTABLE=/usr/bin/python3 \
+    ../cpp
+    && \
     ninja && \
     echo "✅ TensorRT-LLM build complete."
 
