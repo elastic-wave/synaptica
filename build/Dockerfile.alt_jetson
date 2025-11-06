@@ -76,10 +76,7 @@ RUN rm -rf build && mkdir -p build && cd build && \
     +  -DPYBIND11_FINDPYTHON=OFF \
     -Dpybind11_DIR="$PYBIND11_DIR" \
     -DPython3_EXECUTABLE=/usr/bin/python3 \
-    ../cpp
-    && \
-    ninja && \
-    echo "✅ TensorRT-LLM build complete."
+    ../cpp && ninja && echo "✅ TensorRT-LLM build complete."
 
 # Make sure the built shared libs are discoverable at runtime
 ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
