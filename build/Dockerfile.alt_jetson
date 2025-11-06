@@ -29,11 +29,15 @@ RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 300 \
 
 # --- Torch install (prefer local wheel to avoid flaky index) ---
 # (Place the wheel alongside your Dockerfile; it's copied into the build context)
-COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl
-RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl || \
-    (echo "Local wheel missing/failed, trying URL..." && \
-     test -n "$TORCH_WHL_URL" && \
-     python3 -m pip install --no-cache-dir --retries 5 --timeout 600 "$TORCH_WHL_URL")   
+ARG TORCH_WHL_URL=""
+COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/  # OK if file exists; if not, comment this line out rather than failing the build
+RUN if [ -f /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl ]; then \
+      python3 -m pip install --no-cache-dir --retries 5 --timeout 600 /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl; \
+    elif [ -n "$TORCH_WHL_URL" ]; then \
+      python3 -m pip install --no-cache-dir --retries 5 --timeout 600 "$TORCH_WHL_URL"; \
+    else \
+      echo 'No local wheel and no TORCH_WHL_URL provided' >&2; exit 1; \
+    fi
 
 # ---- Get TensorRT-LLM (Jetson branch) ----
 ARG TRTLLM_BRANCH=v0.12.0-jetson
