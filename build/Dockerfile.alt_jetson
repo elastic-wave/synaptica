@@ -73,7 +73,7 @@ RUN rm -rf build && mkdir -p build && cd build && \
     -DTRTLLM_ENABLE_NVTX=OFF \
     -DENABLE_MULTI_DEVICE=OFF \
     -DCMAKE_CUDA_ARCHITECTURES=87 \
-    +  -DPYBIND11_FINDPYTHON=OFF \
+    -DPYBIND11_FINDPYTHON=OFF \
     -Dpybind11_DIR="$PYBIND11_DIR" \
     -DPython3_EXECUTABLE=/usr/bin/python3 \
     ../cpp && ninja && echo "✅ TensorRT-LLM build complete."
