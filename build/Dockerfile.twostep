@@ -39,11 +39,13 @@ ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
-# (Optional) install PyTorch here if you prefer building with it in the builder
-# Otherwise, you can rely on the runtime stage that already has PyTorch.
-# Example (JetPack 6.2 wheel):
-# RUN python3 -m pip install --no-cache-dir \
-#   https://pypi.jetson-ai-lab.io/jp6/cu126/torch-2.6.0-cp310-cp310-linux_aarch64.whl
+# Copy and install the local Jetson Torch wheel (JP 6.2 / cp310 / aarch64)
+COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
+RUN python3 -m pip install --no-cache-dir --timeout 600 /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl && \
+    python3 - <<'PY'
+import torch, platform
+print("Torch:", torch.__version__, "| CUDA available:", torch.cuda.is_available(), "|", platform.platform())
+PY
 
 # Get TensorRT-LLM (Jetson branch)
 ARG TRTLLM_BRANCH=v0.12.0-jetson
