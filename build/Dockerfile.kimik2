@@ -1,0 +1,66 @@
+# Use JetPack 6.1 L4T base image (ARM64)
+# Adjust r36.4.0 if using different JetPack version
+FROM nvcr.io/nvidia/l4t-base:r36.4.0
+
+# Set environment variables to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Fix CUDA paths for Jetson (critical to avoid "No CUDA compiler found" errors)
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=/usr/local/cuda/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    git-lfs \
+    python3 \
+    python3-pip \
+    python3-dev \
+    cmake \
+    build-essential \
+    ninja-build \
+    libopenmpi-dev \
+    openmpi-bin \
+    libncurses5-dev \
+    libssl-dev \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip3 install --upgrade pip setuptools wheel
+
+# Clone TensorRT-LLM jetson-specific branch
+WORKDIR /workspace
+RUN git clone --recursive --branch v0.12.0-jetson https://github.com/NVIDIA/TensorRT-LLM.git
+WORKDIR /workspace/TensorRT-LLM
+
+# Pull Git LFS files
+RUN git lfs install && git lfs pull
+
+# Install Python requirements
+RUN pip3 install -r requirements.txt
+
+# Critical: Build TensorRT-LLM wheel WITHOUT NCCL
+# NCCL is for multi-GPU communication and causes build issues on Jetson
+# We use --trt_root to point to Jetson's TensorRT and disable NCCL
+RUN python3 scripts/build_wheel.py \
+    --jetsons \
+    --clean \
+    --use_ccache \
+    --trt_root /usr/lib/aarch64-linux-gnu \
+    --cuda_architectures "87-real" \
+    --extra-cmake-vars "USE_NCCL=OFF;TRTLLM_ENABLE_NCCL=0"
+
+# Install the built wheel
+RUN pip3 install ./build/tensorrt_llm-*.whl
+
+# Verify installation
+RUN python3 -c "import tensorrt_llm; print('TensorRT-LLM installed successfully')"
+
+# Set up working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]
