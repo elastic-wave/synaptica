@@ -41,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Pip tooling and pybind11 (newer than Ubuntu’s)
 ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN python3 -m pip install --no-cache-dir filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
+
+# Install PyBind11
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
@@ -48,9 +51,12 @@ RUN python3 -m pip install --upgrade pip && \
 RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 \
       filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
 
-# 2) Install your Jetson Torch wheel ONLY (no deps, no index)
-COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
-RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl
+# 2) Install Jetson Torch 2.4.0 wheel (JP6.2/cu126) from your build context
+COPY torch-2.4.0-cp310-cp310-linux_aarch64.whl /tmp/
+RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.4.0-cp310-cp310-linux_aarch64.whl && \
+    python3 - <<'PY'
+import torch; print("Torch:", torch.__version__, "CUDA:", torch.cuda.is_available())
+PY
 
 # 3) Sanity check
 RUN python3 - <<'PY'
@@ -66,6 +72,8 @@ RUN git submodule update --init --recursive || true
 
 RUN python3 -c "import torch; print('Torch version:', torch.__version__)"
 RUN python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+
+ENV TORCH_CUDA_ARCH_LIST="8.7+PTX"
 
 # Build TensorRT-LLM (no NCCL)
 RUN rm -rf build && mkdir -p build && cd build && \

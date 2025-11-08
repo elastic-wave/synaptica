@@ -23,6 +23,9 @@ docker build --network=host -t trtllm-jetson-nonccl:0.12   --build-arg TRTLLM_BR
 
 docker build -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep  .
 
+#2step build with full refresh (for when changed configuration/library sources)
+
+docker build --no-cache -t trtllm-jetson-multistage:0.12 -f Dockerfile.twostep .
 
 
 
