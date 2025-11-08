@@ -39,9 +39,11 @@ ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
-# Copy and install the local Jetson Torch wheel (JP 6.2 / cp310 / aarch64)
+# Copy the exact Jetson wheel into the image (keep the filename intact)
 COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
-RUN python3 -m pip install --no-cache-dir --timeout 600 /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl && \
+
+# Install ONLY that wheel (no network/index)
+RUN python3 -m pip install --no-cache-dir --no-index /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl && \
     python3 - <<'PY'
 import torch, platform
 print("Torch:", torch.__version__, "| CUDA available:", torch.cuda.is_available(), "|", platform.platform())
@@ -52,6 +54,9 @@ ARG TRTLLM_BRANCH=v0.12.0-jetson
 RUN git clone --branch ${TRTLLM_BRANCH} --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /opt/TensorRT-LLM
 WORKDIR /opt/TensorRT-LLM
 RUN git submodule update --init --recursive || true
+
+RUN python3 -c "import torch; print('Torch version:', torch.__version__)"
+RUN python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 
 # Build TensorRT-LLM (no NCCL)
 RUN rm -rf build && mkdir -p build && cd build && \
