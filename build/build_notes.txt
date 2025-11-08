@@ -32,6 +32,10 @@ docker build -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep  .
 
 docker build --network=host -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep .
 
+# kimi k2 version
+
+docker build -t tensorrt-llm-jetson-nano:0.12.0-jetson -f build/Dockerfile.kimik2 .
+
 
 # Run it with the NVIDIA runtime and host IPC (TRT-LLM recommends --ipc=host):
 docker run --rm -it --gpus all --ipc=host \

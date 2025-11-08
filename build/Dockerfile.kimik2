@@ -1,6 +1,6 @@
 # Use JetPack 6.1 L4T base image (ARM64)
 # Adjust r36.4.0 if using different JetPack version
-FROM nvcr.io/nvidia/l4t-base:r36.4.0
+FROM nvcr.io/nvidia/l4t-base:r36.2.0
 
 # Set environment variables to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
