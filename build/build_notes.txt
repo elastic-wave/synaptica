@@ -8,12 +8,17 @@ docker build --network=host -t trtllm-jetson-nonccl:0.12   --build-arg TRTLLM_BR
 Note: Don’t activate a Python virtual environment during the Docker build. Docker itself is a virtual environment
 
 # download the whl file directly to local
+######################################################################################################
 
+# 2.8.0 version
 # download the torch file and access it locally (build will copy from /projects/synaptica folder)
 # see https://pypi.jetson-ai-lab.io/jp6/cu126/torch/2.8.0
 
-URL='https://pypi.jetson-ai-lab.io/jp6/cu126/+f/62a/1beee9f2f1470/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=62a1beee9f2f147076a974d2942c90060c12771c94740830327cae705b2595fc'
-curl -L --retry 10 --retry-delay 5 --connect-timeout 60 --max-time 0 -o build/torch-2.6.0-cp310-cp310-linux_aarch64.whl "$URL"
+# 2.4.0-cp310-cp310-linux_aarch64.whl
+# google the file name to get the link, then wget it
+wget -O torch-2.4.0-cp310-cp310-linux_aarch64.whl https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.4.0a0+f70bd71a48.nv24.06.15634931-cp310-cp310-linux_aarch64.whl
+
+
 
 # then copy to project root before runing build
 cp build/torch-2.6.0-cp310-cp310-linux_aarch64.whl .
@@ -25,7 +30,7 @@ docker build -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep  .
 
 #2step build with full refresh (for when changed configuration/library sources)
 
-docker build --no-cache -t trtllm-jetson-multistage:0.12 -f Dockerfile.twostep .
+docker build --no-cache -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep .
 
 
 
