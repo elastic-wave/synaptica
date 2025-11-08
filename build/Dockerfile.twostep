@@ -47,6 +47,24 @@ RUN python3 -m pip install --no-cache-dir filelock typing-extensions sympy netwo
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
+# Add Jetson APT repos for r36.4 (JetPack 6.2)
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg ca-certificates && \
+    curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc \
+      | gpg --dearmor -o /usr/share/keyrings/nvidia-jetson-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/common r36.4 main" \
+      > /etc/apt/sources.list.d/nvidia-jetson.list && \
+    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/t234 r36.4 main" \
+      >> /etc/apt/sources.list.d/nvidia-jetson.list && \
+    apt-get update
+
+# Install cuDNN 8 runtime (+ headers if you want)
+RUN apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# (Optional) sanity check
+RUN test -e /usr/lib/aarch64-linux-gnu/libcudnn.so.8 && echo "cuDNN 8 present"
+
+
 # 1) Install Torch’s Python dependencies from PyPI first
 RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 \
       filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
