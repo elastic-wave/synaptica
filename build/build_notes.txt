@@ -30,8 +30,7 @@ docker build -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep  .
 
 #2step build with full refresh (for when changed configuration/library sources)
 
-docker build --no-cache -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep .
-
+docker build --network=host -t trtllm-jetson-multistage:0.12 -f build/Dockerfile.twostep .
 
 
 # Run it with the NVIDIA runtime and host IPC (TRT-LLM recommends --ipc=host):
