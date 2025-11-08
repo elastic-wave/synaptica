@@ -52,7 +52,7 @@ RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 \
       filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
 
 # 2) Install Jetson Torch 2.4.0 wheel (JP6.2/cu126) from your build context
-COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
+COPY torch-2.4.0-cp310-cp310-linux_aarch64.whl /tmp/
 RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.4.0-cp310-cp310-linux_aarch64.whl && \
     python3 - <<'PY'
 import torch; print("Torch:", torch.__version__, "CUDA:", torch.cuda.is_available())
