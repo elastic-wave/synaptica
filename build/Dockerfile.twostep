@@ -47,19 +47,17 @@ RUN python3 -m pip install --no-cache-dir filelock typing-extensions sympy netwo
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
-# Add Jetson APT repos for r36.4 (JetPack 6.2) — robust version
+# Add NVIDIA Jetson repos the easy way (installs keys + lists)
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends curl gnupg ca-certificates; \
-    mkdir -p /usr/share/keyrings; \
-    curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc -o /tmp/jetson-ota-public.asc; \
-    gpg --batch --dearmor -o /usr/share/keyrings/nvidia-jetson-archive-keyring.gpg /tmp/jetson-ota-public.asc; \
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/common r36.4 main" > /etc/apt/sources.list.d/nvidia-jetson.list; \
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/t234 r36.4 main" >> /etc/apt/sources.list.d/nvidia-jetson.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends nvidia-l4t-apt-source; \
     apt-get update
 
-# Install cuDNN 8 runtime (+ headers if you want)
-RUN apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev && \
-    rm -rf /var/lib/apt/lists/*
+    # Install cuDNN runtime (prefer v8 for torch 2.4.0, else try v9)
+RUN set -eux; \
+    apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev || \
+    apt-get install -y --no-install-recommends libcudnn9 libcudnn9-dev; \
+    ldconfig
 
 # (Optional) sanity check
 RUN test -e /usr/lib/aarch64-linux-gnu/libcudnn.so.8 && echo "cuDNN 8 present"
