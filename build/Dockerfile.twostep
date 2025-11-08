@@ -34,19 +34,28 @@ RUN set -eux; \
    || apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev && \
    rm -rf /var/lib/apt/lists/*
 
+# Make sure BLAS bits are present (prevents libopenblas.so.0 import errors)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libopenblas0 libopenblas-dev libgfortran5 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Pip tooling and pybind11 (newer than Ubuntu’s)
 ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
 
-# Copy the exact Jetson wheel into the image (keep the filename intact)
-COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
+# 1) Install Torch’s Python dependencies from PyPI first
+RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 \
+      filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
 
-# Install ONLY that wheel (no network/index)
-RUN python3 -m pip install --no-cache-dir --no-index /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl && \
-    python3 - <<'PY'
+# 2) Install your Jetson Torch wheel ONLY (no deps, no index)
+COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
+RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl
+
+# 3) Sanity check
+RUN python3 - <<'PY'
 import torch, platform
-print("Torch:", torch.__version__, "| CUDA available:", torch.cuda.is_available(), "|", platform.platform())
+print("Torch:", torch.__version__, "| CUDA:", torch.cuda.is_available(), "|", platform.platform())
 PY
 
 # Get TensorRT-LLM (Jetson branch)
