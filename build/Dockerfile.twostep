@@ -1,103 +1,60 @@
-# ============================
-# Stage 1: builder (JetPack 6.2)
-# ============================
+##############################################
+# Stage 1 — Builder (JetPack 6.2 base)
+##############################################
 FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0 AS builder
 SHELL ["/bin/bash","-lc"]
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
-# Core build deps
+# Core build deps + BLAS (helps avoid libopenblas import issues)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git git-lfs ca-certificates curl gnupg \
     build-essential cmake ninja-build pkg-config \
     python3 python3-dev python3-pip \
     libprotobuf-dev protobuf-compiler \
+    libopenblas0 libopenblas-dev libgfortran5 \
  && rm -rf /var/lib/apt/lists/* && git lfs install
 
-# Add NVIDIA Jetson APT repos (for TRT/cuDNN dev packages on r36.4)
-RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg ca-certificates && \
-    curl -fsSL https://repo.download.nvidia.com/jetson/jetson-ota-public.asc \
-      | gpg --dearmor -o /usr/share/keyrings/nvidia-jetson-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/common r36.4 main" \
-      > /etc/apt/sources.list.d/nvidia-jetson.list && \
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-jetson-archive-keyring.gpg] https://repo.download.nvidia.com/jetson/t234 r36.4 main" \
-      >> /etc/apt/sources.list.d/nvidia-jetson.list && \
-    apt-get update || true
-
-# Install TensorRT + cuDNN dev headers/libs (names differ across JP, try both)
-RUN set -eux; \
-    apt-get install -y --no-install-recommends \
-      libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev libnvparsers-dev \
-   || apt-get install -y --no-install-recommends tensorrt-dev || true && \
-   apt-get install -y --no-install-recommends libcudnn9 libcudnn9-dev \
-   || apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev && \
-   rm -rf /var/lib/apt/lists/*
-
-# Make sure BLAS bits are present (prevents libopenblas.so.0 import errors)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      libopenblas0 libopenblas-dev libgfortran5 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Pip tooling and pybind11 (newer than Ubuntu’s)
+# Keep PyPI as primary for generic deps (NOT Torch)
 ENV PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
-RUN python3 -m pip install --no-cache-dir filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
 
-# Install PyBind11
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
-
-# Add NVIDIA Jetson repos the easy way (installs keys + lists)
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends nvidia-l4t-apt-source; \
-    apt-get update
-
-    # Install cuDNN runtime (prefer v8 for torch 2.4.0, else try v9)
-RUN set -eux; \
-    apt-get install -y --no-install-recommends libcudnn8 libcudnn8-dev || \
-    apt-get install -y --no-install-recommends libcudnn9 libcudnn9-dev; \
-    ldconfig
-
-# (Optional) sanity check
-RUN test -e /usr/lib/aarch64-linux-gnu/libcudnn.so.8 && echo "cuDNN 8 present"
-
-
-# 1) Install Torch’s Python dependencies from PyPI first
-RUN python3 -m pip install --no-cache-dir --retries 5 --timeout 600 \
+# Pure-Python deps Torch expects
+RUN python3 -m pip install --no-cache-dir \
       filelock typing-extensions sympy networkx jinja2 mpmath fsspec MarkupSafe
 
-# 2) Install Jetson Torch 2.4.0 wheel (JP6.2/cu126) from your build context
-COPY torch-2.4.0-cp310-cp310-linux_aarch64.whl /tmp/
-RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.4.0-cp310-cp310-linux_aarch64.whl && \
-    python3 - <<'PY'
-import torch; print("Torch:", torch.__version__, "CUDA:", torch.cuda.is_available())
-PY
+# ---- Install Jetson PyTorch 2.6.0 (CUDA 12.6, cuDNN 9, cp310, aarch64) ----
+# Put the wheel next to this Dockerfile before building.
+COPY torch-2.6.0-cp310-cp310-linux_aarch64.whl /tmp/
+RUN python3 -m pip install --no-cache-dir --no-deps --no-index /tmp/torch-2.6.0-cp310-cp310-linux_aarch64.whl
 
-# 3) Sanity check
+# Quick sanity
 RUN python3 - <<'PY'
 import torch, platform
-print("Torch:", torch.__version__, "| CUDA:", torch.cuda.is_available(), "|", platform.platform())
+print("Torch:", torch.__version__, "| CUDA available:", torch.cuda.is_available(), "|", platform.platform())
 PY
 
-# Get TensorRT-LLM (Jetson branch)
+# Newer pybind11 than Ubuntu’s (works with our CMake toggles)
+RUN python3 -m pip install --no-cache-dir "pybind11>=2.11,<2.13"
+
+# Get TensorRT-LLM (Jetson-friendly branch)
 ARG TRTLLM_BRANCH=v0.12.0-jetson
 RUN git clone --branch ${TRTLLM_BRANCH} --depth 1 https://github.com/NVIDIA/TensorRT-LLM.git /opt/TensorRT-LLM
 WORKDIR /opt/TensorRT-LLM
 RUN git submodule update --init --recursive || true
 
-RUN python3 -c "import torch; print('Torch version:', torch.__version__)"
-RUN python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
-
+# Set architecture list for PyTorch; keep NCCL disabled
 ENV TORCH_CUDA_ARCH_LIST="8.7+PTX"
 
-# Build TensorRT-LLM (no NCCL)
+# Build TensorRT-LLM (NO NCCL, target SM 8.7)
 RUN rm -rf build && mkdir -p build && cd build && \
     PYBIND11_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())") && \
     cmake -S ../cpp -B . \
       -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF \
-      -DTRTLLM_BUILD_EXAMPLES=OFF -DTRTLLM_ENABLE_NVTX=OFF \
+      -DBUILD_PYTHON=ON \
+      -DBUILD_TESTS=OFF \
+      -DTRTLLM_BUILD_EXAMPLES=OFF \
+      -DTRTLLM_ENABLE_NVTX=OFF \
       -DENABLE_MULTI_DEVICE=OFF \
       -DCMAKE_CUDA_ARCHITECTURES=87 \
       -DPYBIND11_FINDPYTHON=OFF \
@@ -106,12 +63,15 @@ RUN rm -rf build && mkdir -p build && cd build && \
       -DTensorRT_DIR=/usr/lib/aarch64-linux-gnu/cmake/TensorRT \
       -DTRT_LIB_DIR=/usr/lib/aarch64-linux-gnu \
       -DTRT_INCLUDE_DIRS=/usr/include/aarch64-linux-gnu \
-      -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda && \
-    ninja -v
+      -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+      # Workaround for Torch 2.6 CMake quirk
+      -DTORCH_CXX_FLAGS:STRING="" \
+      -DTORCH_NVCC_FLAGS:STRING="" \
+    && ninja -v
 
-# ============================
-# Stage 2: runtime (PyTorch)
-# ============================
+##############################################
+# Stage 2 — Runtime (PyTorch preinstalled)
+##############################################
 FROM dustynv/l4t-pytorch:r36.4.0
 SHELL ["/bin/bash","-lc"]
 
@@ -119,14 +79,14 @@ ENV DEBIAN_FRONTEND=noninteractive TZ=UTC \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     PIP_INDEX_URL=https://pypi.org/simple PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Copy built TRT-LLM from builder
+# Bring in the built tree
 COPY --from=builder /opt/TensorRT-LLM /opt/TensorRT-LLM
 
-# Install the Python bindings (editable)
+# Install TRT-LLM Python bindings (editable)
 RUN python3 -m pip install --no-cache-dir -e /opt/TensorRT-LLM/python
 
-# Make sure the runtime can find built shared libs
+# Shared libs visible at runtime
 ENV LD_LIBRARY_PATH=/opt/TensorRT-LLM/build:$LD_LIBRARY_PATH
 
 WORKDIR /workspace
-CMD ["/bin/bash", "-lc", "echo 'TensorRT-LLM ready (single-GPU, NCCL disabled). Use trtllm-build with --nccl_plugin disable.' && bash"]
+CMD ["/bin/bash","-lc","echo 'TensorRT-LLM ready (single-GPU, NCCL disabled). Use: trtllm-build --nccl_plugin disable' && bash"]
